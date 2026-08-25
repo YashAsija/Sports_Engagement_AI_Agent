@@ -2,7 +2,7 @@ import os
 import json
 from enum import Enum
 from typing import List, Optional, Union, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 class SportType(str, Enum):
     CRICKET = "Cricket"
@@ -31,6 +31,19 @@ class GroundingSource(BaseModel):
     url_or_id: Optional[str] = Field(default=None, description="URL or Document ID")
     snippet: Optional[str] = Field(default=None, description="Excerpt supporting the factual statement")
 
+# Base validator to ensure no wrong sport hallucinations
+def check_sport_relevance(sport_val: str, text_val: str):
+    if not text_val or not sport_val:
+        return text_val
+    wrong_sports = ['cricket', 'football', 'tennis', 'basketball', 'badminton', 'baseball', 'rugby', 'hockey']
+    expected = sport_val.lower().strip()
+    text_lower = text_val.lower()
+    for s in wrong_sports:
+        if s != expected and s in text_lower:
+            # Exception for phrases like "football vs basketball" if both mentioned, but strict for single sport context
+            raise ValueError(f"Content mentions wrong sport '{s}' when expecting '{sport_val}'")
+    return text_val
+
 # 1. Multiple Choice Question (MCQ)
 class MCQItem(BaseModel):
     id: str
@@ -43,6 +56,10 @@ class MCQItem(BaseModel):
     explanation: str = Field(description="Short factual explanation grounding the answer")
     grounding: GroundingSource
 
+    @validator('question', 'explanation', pre=False, always=True)
+    def must_mention_sport_context(cls, v, values):
+        return check_sport_relevance(values.get('sport', ''), v)
+
 # 2. True / False
 class TrueFalseItem(BaseModel):
     id: str
@@ -54,6 +71,10 @@ class TrueFalseItem(BaseModel):
     explanation: str = Field(description="Short factual explanation grounding the answer")
     grounding: GroundingSource
 
+    @validator('statement', 'explanation', pre=False, always=True)
+    def must_mention_sport_context(cls, v, values):
+        return check_sport_relevance(values.get('sport', ''), v)
+
 # 3. This-or-That Poll
 class ThisOrThatPollItem(BaseModel):
     id: str
@@ -64,6 +85,10 @@ class ThisOrThatPollItem(BaseModel):
     is_opinion: bool = Field(default=True, description="Flagged as opinion-based, not fact-checked")
     explanation: str = Field(default="Pure opinion poll for Instagram community engagement", description="Context about the debate")
     grounding: GroundingSource = Field(default_factory=lambda: GroundingSource(source_type="opinion_based", citation_title="Community Opinion Poll"))
+
+    @validator('prompt', 'explanation', pre=False, always=True)
+    def must_mention_sport_context(cls, v, values):
+        return check_sport_relevance(values.get('sport', ''), v)
 
 # 4. Fill in the Blank
 class FillInTheBlankItem(BaseModel):
@@ -77,6 +102,10 @@ class FillInTheBlankItem(BaseModel):
     explanation: str = Field(description="Short factual explanation")
     grounding: GroundingSource
 
+    @validator('sentence_with_blank', 'explanation', pre=False, always=True)
+    def must_mention_sport_context(cls, v, values):
+        return check_sport_relevance(values.get('sport', ''), v)
+
 # 5. Guess the Number
 class GuessTheNumberItem(BaseModel):
     id: str
@@ -89,6 +118,10 @@ class GuessTheNumberItem(BaseModel):
     explanation: str = Field(description="Short factual context detailing the number")
     grounding: GroundingSource
 
+    @validator('question', 'explanation', pre=False, always=True)
+    def must_mention_sport_context(cls, v, values):
+        return check_sport_relevance(values.get('sport', ''), v)
+
 ContentItem = Union[MCQItem, TrueFalseItem, ThisOrThatPollItem, FillInTheBlankItem, GuessTheNumberItem]
 
 class BatchGenerationRequest(BaseModel):
@@ -96,7 +129,7 @@ class BatchGenerationRequest(BaseModel):
     difficulty: str = "Medium"
     content_format: str = "Mixed Batch"
     count: int = 5
-    retrieval_source: str = "both" # "web_search", "chromadb", "both"
+    retrieval_source: str = "both"
     use_web_search: Optional[bool] = True
 
 class SingleItemRegenerateRequest(BaseModel):
@@ -105,7 +138,7 @@ class SingleItemRegenerateRequest(BaseModel):
     content_format: str
     target_item_id: str
     existing_batch_ids: List[str] = []
-    retrieval_source: str = "both" # "web_search", "chromadb", "both"
+    retrieval_source: str = "both"
     use_web_search: Optional[bool] = True
 
 class BatchGenerationResponse(BaseModel):

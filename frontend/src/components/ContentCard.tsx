@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ContentItem } from '../types';
 import { GroundingBadge } from './GroundingBadge';
-import { RefreshCw, Copy, Check, Eye, Smartphone, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Copy, Check, Eye, Smartphone, CheckCircle2, ExternalLink } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface ContentCardProps {
@@ -44,6 +44,9 @@ export const ContentCard = ({ item, onRegenerate, isRegenerating }: ContentCardP
     }
 
     text += `\n📌 Context: ${item.explanation}\n`;
+    if (item.grounding?.url_or_id) {
+      text += `🔗 Source: ${item.grounding.url_or_id}\n`;
+    }
     text += `\n#${item.sport.replace(/\s+/g, '')} #SportsTrivia #InstagramStickers #StapuBoxStudio`;
     return text;
   };
@@ -255,13 +258,28 @@ export const ContentCard = ({ item, onRegenerate, isRegenerating }: ContentCardP
                 </div>
               )}
 
-              {/* Context Grounding Section */}
+              {/* Context Grounding Section with explicit Source URL footer */}
               <div className="pt-3 border-t border-slate-800/80 space-y-2">
                 <p className="text-xs text-slate-400 leading-normal">
                   <span className="font-bold text-slate-300">Context: </span>
                   {item.explanation}
                 </p>
-                <GroundingBadge grounding={item.grounding} />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <GroundingBadge grounding={item.grounding} />
+                  {item.grounding?.url_or_id && (
+                    <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
+                      <span>Source:</span>
+                      {item.grounding.url_or_id.startsWith('http') ? (
+                        <a href={item.grounding.url_or_id} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline truncate max-w-[150px] inline-flex items-center gap-0.5">
+                          <span>{item.grounding.url_or_id.replace(/^https?:\/\//, '')}</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-300 font-semibold">{item.grounding.url_or_id}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </motion.div>
           ) : (

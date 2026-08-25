@@ -1,0 +1,17 @@
+# Virtual Environment
+.venv/
+__pycache__/
+*.pyc
+
+# Node & Build Outputs
+node_modules/
+dist/
+.DS_Store
+
+# Environment Variables & Keys
+.env
+.env.local
+
+# Pytest & Cache
+.pytest_cache/
+.chroma/

@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { ContentItem } from '../types';
 import { GroundingBadge } from './GroundingBadge';
-import { RefreshCw, Copy, Check, Eye, Smartphone } from 'lucide-react';
+import { RefreshCw, Copy, Check, Eye, Smartphone, Trophy, Flame, Target, HelpCircle, CheckCircle2 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 
 interface ContentCardProps {
   item: ContentItem;
@@ -11,11 +13,12 @@ interface ContentCardProps {
 
 export const ContentCard = ({ item, onRegenerate, isRegenerating }: ContentCardProps) => {
   const [showAnswer, setShowAnswer] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'card' | 'instagram'>('card');
   const [copied, setCopied] = useState(false);
 
   const formatTextForInstagram = () => {
-    let text = `🏆 ${item.sport.toUpperCase()} ENGAGEMENT STICKER\n`;
+    let text = `🏆 STAPUBOX SPORTS STICKER • ${item.sport.toUpperCase()}\n`;
     text += `Format: ${item.format}\n\n`;
 
     if (item.format === 'MCQ') {
@@ -29,7 +32,7 @@ export const ContentCard = ({ item, onRegenerate, isRegenerating }: ContentCardP
       text += `⚡ True or False Challenge:\n${item.statement}\n\n`;
       text += `✅ Correct Answer: ${item.correct_answer}\n`;
     } else if (item.format === 'This-or-That Poll') {
-      text += `🔥 Opinion Poll:\n${item.prompt}\n\nOption A: ${item.options?.[0]}\nOption B: ${item.options?.[1]}\n`;
+      text += `🔥 Community Debate:\n${item.prompt}\n\nOption A: ${item.options?.[0]}\nOption B: ${item.options?.[1]}\n`;
     } else if (item.format === 'Fill in the Blank') {
       text += `✏️ Fill in the Blank:\n${item.sentence_with_blank}\n\nOptions:\n`;
       item.options?.forEach((opt) => {
@@ -41,7 +44,7 @@ export const ContentCard = ({ item, onRegenerate, isRegenerating }: ContentCardP
     }
 
     text += `\n📌 Context: ${item.explanation}\n`;
-    text += `\n#${item.sport.replace(/\s+/g, '')} #${item.sport}Trivia #SportsQuiz #InstagramSticker`;
+    text += `\n#${item.sport.replace(/\s+/g, '')} #SportsTrivia #InstagramStickers #StapuBoxStudio`;
     return text;
   };
 
@@ -51,216 +54,277 @@ export const ContentCard = ({ item, onRegenerate, isRegenerating }: ContentCardP
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleOptionClick = (opt: string) => {
+    setSelectedOption(opt);
+    setShowAnswer(true);
+
+    if (opt === item.correct_answer) {
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.8 },
+        colors: ['#f97316', '#6366f1', '#10b981']
+      });
+    }
+  };
+
+  const getFormatBadgeColor = (fmt: string) => {
+    switch (fmt) {
+      case 'MCQ': return 'bg-orange-500/10 text-orange-400 border-orange-500/30';
+      case 'True / False': return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
+      case 'This-or-That Poll': return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+      case 'Fill in the Blank': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+      default: return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+    }
+  };
+
   return (
-    <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-5 shadow-xl transition-all duration-300 hover:border-slate-700 hover:shadow-2xl flex flex-col justify-between">
-      {/* Header Bar */}
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.3 }}
+      className="sports-card rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden group"
+    >
+      {/* Top Card Header */}
       <div>
-        <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getFormatBadgeColor(item.format)}`}>
               {item.format}
             </span>
-            <span className="text-xs text-slate-400 font-medium">
+            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
               {item.sport} • {item.difficulty || 'Normal'}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab(activeTab === 'card' ? 'instagram' : 'card')}
-              className={`p-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 border ${
                 activeTab === 'instagram'
-                  ? 'bg-gradient-to-r from-pink-500 to-purple-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  ? 'bg-gradient-to-r from-pink-500 to-purple-600 border-pink-400 text-white shadow-md'
+                  : 'bg-slate-800/80 border-slate-700/60 text-slate-300 hover:bg-slate-700'
               }`}
-              title="Toggle Instagram Sticker Preview"
             >
               <Smartphone className="w-3.5 h-3.5" />
-              <span>{activeTab === 'instagram' ? 'Sticker Mode' : 'Card Mode'}</span>
+              <span>{activeTab === 'instagram' ? 'Sticker View' : 'Card View'}</span>
             </button>
 
             <button
               onClick={() => onRegenerate(item.id)}
               disabled={isRegenerating}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors disabled:opacity-50"
-              title="Regenerate this item"
+              className="p-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white transition-all disabled:opacity-50"
+              title="Regenerate single item"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin text-indigo-400' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin text-orange-400' : ''}`} />
             </button>
           </div>
         </div>
 
         {/* Card Main View */}
-        {activeTab === 'card' ? (
-          <div className="space-y-4 my-2">
-            {/* MCQ View */}
-            {item.format === 'MCQ' && (
-              <div>
-                <h3 className="text-base font-semibold text-slate-100 mb-3">{item.question}</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {item.options?.map((opt, i) => {
-                    const isCorrect = opt === item.correct_answer;
-                    return (
-                      <div
-                        key={i}
-                        className={`p-2.5 rounded-xl border text-sm transition-all ${
-                          showAnswer && isCorrect
-                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-200 font-semibold'
-                            : 'bg-slate-800/60 border-slate-700/50 text-slate-300'
-                        }`}
-                      >
-                        <span className="font-bold text-indigo-400 mr-1.5">{String.fromCharCode(65 + i)}.</span>
-                        {opt}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* True / False View */}
-            {item.format === 'True / False' && (
-              <div>
-                <p className="text-base font-semibold text-slate-100 mb-3">"{item.statement}"</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {['True', 'False'].map((val) => {
-                    const isCorrect = val === item.correct_answer;
-                    return (
-                      <div
-                        key={val}
-                        className={`p-3 text-center rounded-xl border font-bold text-sm transition-all ${
-                          showAnswer && isCorrect
-                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
-                            : 'bg-slate-800/60 border-slate-700/50 text-slate-300'
-                        }`}
-                      >
-                        {val}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* This-or-That Poll View */}
-            {item.format === 'This-or-That Poll' && (
-              <div>
-                <h3 className="text-base font-semibold text-slate-100 mb-3">{item.prompt}</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {item.options?.map((opt, i) => (
-                    <div
-                      key={i}
-                      className="p-3 text-center rounded-xl bg-gradient-to-r from-purple-900/40 to-indigo-900/40 border border-purple-500/30 font-bold text-sm text-purple-200"
-                    >
-                      {opt}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Fill in the Blank View */}
-            {item.format === 'Fill in the Blank' && (
-              <div>
-                <p className="text-base font-semibold text-slate-100 mb-3 leading-relaxed">
-                  {item.sentence_with_blank}
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {item.options?.map((opt, i) => {
-                    const isCorrect = opt === item.correct_answer;
-                    return (
-                      <div
-                        key={i}
-                        className={`p-2.5 rounded-xl border text-sm transition-all ${
-                          showAnswer && isCorrect
-                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-200 font-semibold'
-                            : 'bg-slate-800/60 border-slate-700/50 text-slate-300'
-                        }`}
-                      >
-                        {opt}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Guess the Number View */}
-            {item.format === 'Guess the Number' && (
-              <div>
-                <h3 className="text-base font-semibold text-slate-100 mb-3">{item.question}</h3>
-                <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Target Value:</span>
-                  <span className="font-mono text-lg font-bold text-amber-400">
-                    {showAnswer ? item.target_number : '???'}
-                  </span>
-                  <span className="text-xs text-slate-400">Range: {item.accepted_tolerance_range}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Grounding Explanation */}
-            <div className="pt-2 border-t border-slate-800">
-              <p className="text-xs text-slate-400 leading-normal mb-2">
-                <span className="font-semibold text-slate-300">Context: </span>
-                {item.explanation}
-              </p>
-              <GroundingBadge grounding={item.grounding} />
-            </div>
-          </div>
-        ) : (
-          /* Instagram Sticker Mock View */
-          <div className="my-3 p-4 rounded-2xl bg-gradient-to-br from-pink-600 via-purple-700 to-indigo-800 text-white shadow-inner flex flex-col items-center justify-center text-center space-y-3">
-            <div className="uppercase tracking-widest text-[10px] font-extrabold bg-white/20 px-2 py-0.5 rounded-full">
-              Instagram Story Sticker
-            </div>
-            
-            <div className="bg-white text-slate-900 rounded-xl p-3 w-full shadow-lg">
-              <p className="font-extrabold text-sm mb-2">
-                {item.question || item.statement || item.prompt || item.sentence_with_blank}
-              </p>
-
-              {item.options && (
-                <div className="space-y-1.5 text-xs font-semibold">
-                  {item.options.map((opt, idx) => (
-                    <div key={idx} className="bg-slate-100 p-2 rounded-lg text-slate-800 flex justify-between">
-                      <span>{opt}</span>
-                      <span className="text-slate-400 font-normal">Tap to vote</span>
-                    </div>
-                  ))}
+        <AnimatePresence mode="wait">
+          {activeTab === 'card' ? (
+            <motion.div
+              key="card-view"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-4 my-2"
+            >
+              {/* MCQ View */}
+              {item.format === 'MCQ' && (
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 mb-4 leading-snug">{item.question}</h3>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {item.options?.map((opt, i) => {
+                      const isCorrect = opt === item.correct_answer;
+                      const isSelected = opt === selectedOption;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => handleOptionClick(opt)}
+                          className={`p-3 rounded-xl border text-sm text-left transition-all font-medium flex items-center justify-between ${
+                            showAnswer && isCorrect
+                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-200 font-bold shadow-lg shadow-emerald-500/10'
+                              : showAnswer && isSelected && !isCorrect
+                              ? 'bg-red-500/20 border-red-500/60 text-red-200'
+                              : 'bg-slate-800/60 border-slate-700/60 text-slate-200 hover:bg-slate-800 hover:border-slate-600'
+                          }`}
+                        >
+                          <span>
+                            <span className="font-mono text-orange-400 font-bold mr-2">{String.fromCharCode(65 + i)}.</span>
+                            {opt}
+                          </span>
+                          {showAnswer && isCorrect && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
-            </div>
 
-            <p className="text-[11px] text-pink-100 opacity-90">
-              Drop directly into Instagram Story via Quiz/Poll stickers.
-            </p>
-          </div>
-        )}
+              {/* True / False View */}
+              {item.format === 'True / False' && (
+                <div>
+                  <p className="text-base font-bold text-slate-100 mb-4 leading-relaxed italic">"{item.statement}"</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {['True', 'False'].map((val) => {
+                      const isCorrect = val === item.correct_answer;
+                      const isSelected = val === selectedOption;
+                      return (
+                        <button
+                          key={val}
+                          onClick={() => handleOptionClick(val)}
+                          className={`p-3.5 text-center rounded-xl border font-extrabold text-sm transition-all ${
+                            showAnswer && isCorrect
+                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-lg shadow-emerald-500/10'
+                              : showAnswer && isSelected && !isCorrect
+                              ? 'bg-red-500/20 border-red-500/60 text-red-300'
+                              : 'bg-slate-800/60 border-slate-700/60 text-slate-200 hover:bg-slate-800'
+                          }`}
+                        >
+                          {val}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* This-or-That Poll View */}
+              {item.format === 'This-or-That Poll' && (
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 mb-4">{item.prompt}</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {item.options?.map((opt, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedOption(opt)}
+                        className={`p-3.5 text-center rounded-xl border font-bold text-sm transition-all ${
+                          selectedOption === opt
+                            ? 'bg-gradient-to-r from-purple-600 to-indigo-600 border-purple-400 text-white shadow-lg'
+                            : 'bg-gradient-to-r from-purple-950/40 to-indigo-950/40 border-purple-500/30 text-purple-200 hover:border-purple-400'
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Fill in the Blank View */}
+              {item.format === 'Fill in the Blank' && (
+                <div>
+                  <p className="text-base font-bold text-slate-100 mb-4 leading-relaxed">
+                    {item.sentence_with_blank}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {item.options?.map((opt, i) => {
+                      const isCorrect = opt === item.correct_answer;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => handleOptionClick(opt)}
+                          className={`p-3 rounded-xl border text-sm text-left font-medium transition-all ${
+                            showAnswer && isCorrect
+                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-200 font-bold'
+                              : 'bg-slate-800/60 border-slate-700/60 text-slate-200 hover:bg-slate-800'
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Guess the Number View */}
+              {item.format === 'Guess the Number' && (
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 mb-4">{item.question}</h3>
+                  <div className="p-4 rounded-xl bg-slate-800/80 border border-slate-700/70 flex items-center justify-between">
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Target Value:</span>
+                    <span className="font-mono text-xl font-extrabold text-orange-400">
+                      {showAnswer ? item.target_number : '???'}
+                    </span>
+                    <span className="text-xs text-slate-400 font-medium">Range: {item.accepted_tolerance_range}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Context Grounding Section */}
+              <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                <p className="text-xs text-slate-400 leading-normal">
+                  <span className="font-bold text-slate-300">Context: </span>
+                  {item.explanation}
+                </p>
+                <GroundingBadge grounding={item.grounding} />
+              </div>
+            </motion.div>
+          ) : (
+            /* Instagram Native Sticker Canvas Mock */
+            <motion.div
+              key="instagram-view"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="my-3 p-5 rounded-2xl bg-gradient-to-br from-pink-600 via-purple-700 to-indigo-800 text-white shadow-2xl flex flex-col items-center justify-center text-center space-y-4 relative"
+            >
+              <div className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest bg-white/20 backdrop-blur-md px-3 py-1 rounded-full border border-white/20">
+                <Smartphone className="w-3 h-3" />
+                <span>Instagram Story Sticker Preview</span>
+              </div>
+
+              <div className="bg-white text-slate-900 rounded-xl p-4 w-full shadow-2xl text-left border border-white/50">
+                <p className="font-black text-sm mb-3 text-slate-900">
+                  {item.question || item.statement || item.prompt || item.sentence_with_blank}
+                </p>
+
+                {item.options && (
+                  <div className="space-y-2 text-xs font-bold">
+                    {item.options.map((opt, idx) => (
+                      <div key={idx} className="bg-slate-100 p-2.5 rounded-lg text-slate-800 flex items-center justify-between border border-slate-200">
+                        <span>{opt}</span>
+                        <span className="text-[10px] text-slate-400 font-medium uppercase">Tap sticker</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <p className="text-[11px] text-pink-100 font-medium opacity-95">
+                Drop directly into native Instagram text/sticker tools.
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Footer Action Row */}
-      <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2 mt-2">
+      {/* Card Footer Actions */}
+      <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-3">
         {item.format !== 'This-or-That Poll' ? (
           <button
             onClick={() => setShowAnswer(!showAnswer)}
-            className="text-xs font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+            className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1.5"
           >
             <Eye className="w-3.5 h-3.5" />
             <span>{showAnswer ? 'Hide Answer' : 'Reveal Answer'}</span>
           </button>
         ) : (
-          <div className="text-xs text-purple-400 font-medium">Opinion Poll</div>
+          <div className="text-xs text-purple-400 font-bold uppercase tracking-wider">Opinion Poll</div>
         )}
 
         <button
           onClick={handleCopy}
-          className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition-colors flex items-center gap-1.5"
+          className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1.5 active:scale-95"
         >
           {copied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
-          <span>{copied ? 'Copied Text!' : 'Copy for IG'}</span>
+          <span>{copied ? 'Copied to Clipboard!' : 'Copy for Instagram'}</span>
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 };

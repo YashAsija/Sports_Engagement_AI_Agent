@@ -5,13 +5,11 @@ Type-specific prompt templates for generating sports engagement content formats.
 def get_system_prompt(sport: str) -> str:
     return f"""You are a {sport} quiz expert. You ONLY generate content about {sport}. Never mention any other sport. If retrieved context contains other sports, ignore it completely.
 
-You are an expert Sports Engagement Content Creator for Instagram. Your mission is to generate high-converting, factually grounded, and engaging content tailored for Instagram Story stickers, Feed posts, and Reel captions.
-
-STRICT INSTRUCTIONS:
+STRICT RULES:
 1. All factual claims MUST be grounded in the provided Context.
 2. DO NOT make up statistics or record numbers.
 3. Keep questions concise and optimized for quick mobile reading.
-4. Do NOT start sentences with 'Regarding {sport}:' or 'About {sport}:'. Write the sentence naturally as it would appear in a quiz.
+4. NEVER start the sentence with 'Regarding {sport}:' or 'About {sport}:'. Write naturally as it would appear in a quiz.
 5. Provide structured output in JSON format adhering strictly to the requested schema.
 """
 
@@ -23,8 +21,18 @@ Difficulty: {difficulty}
 Retrieved Knowledge Context:
 {context}
 
+QUALITY RULES — the question MUST be specific:
+GOOD: 'How many F1 championships did Lewis Hamilton win?'
+GOOD: 'Which year did India win the T20 World Cup under Rohit Sharma?'
+BAD: 'Which official record is associated with this sport?'
+BAD: 'Which of the following is correct?'
+
+ALL 4 options must be real specific values. 
+NEVER write 'Record Option B' or 'Option C' or any placeholder.
+Do NOT start with 'Regarding {sport}:'.
+
 Requirements:
-- Question: Concise, engaging trivia question strictly about {sport}. Do NOT start with 'Regarding {sport}:'.
+- Question: Concise, engaging trivia question strictly about {sport}.
 - Options: EXACTLY 4 distinct options (A, B, C, D).
 - Correct Answer: Must match one of the 4 options exactly.
 - Explanation: 1-2 sentence grounding explanation.
@@ -58,41 +66,31 @@ Requirements:
 """
 
 FILL_IN_BLANK_TEMPLATE = """
-You are a {sport} quiz expert. Generate a Fill-in-the-Blank question where the BLANK replaces a KEY FACT — a specific number, name, year, or place — NOT a generic verb like 'won' or 'completed'.
+You are a {sport} Fill-in-the-Blank quiz expert.
+STRICT RULES:
+1. The blank ___ MUST replace a NUMBER, PROPER NAME, YEAR, or PLACE.
+   NEVER blank out verbs like won/scored/achieved/completed.
+2. All 4 options must be the SAME TYPE as the blank:
+   - If blank=number: all 4 options are numbers (e.g. 263.4/249.0/256.7/271.2)
+   - If blank=name: all 4 options are player/venue names
+   - If blank=year: all 4 options are years (e.g. 2022/2021/2023/2020)
+   - If blank=place: all 4 options are location names
+3. Wrong options must be PLAUSIBLE {sport} values — close but incorrect.
+4. NEVER start the sentence with 'Regarding {sport}:'
+   Write naturally: 'The fastest ATP serve was ___ km/h'
+5. BANNED options (never use): completed, achieved, won, scored, played, finished, started, ended, happened, made, done
 
-The 4 answer options must all be:
-- The same TYPE as the correct answer (all numbers, OR all names, OR all years, OR all places)
-- Plausible wrong answers related to {sport}
-- Specific and factual, never generic words like 'completed', 'achieved', 'won', 'scored', 'played'
-
-GOOD blank types:
-- A year:     'Wimbledon was first held in ___' → options: ["1877", "1881", "1890", "1902"]
-- A number:   'Djokovic has won ___ Grand Slams' → options: ["24", "21", "20", "23"]
-- A name:     'The fastest serve was by ___' → options: ["Sam Groth", "Novak Djokovic", "Roger Federer", "Andy Roddick"]
-- A country/place: 'Rafael Nadal has won 14 titles at ___' → options: ["Roland Garros", "Wimbledon", "Flushing Meadows", "Melbourne Park"]
-
-BAD blank types (NEVER do this):
-- Generic verbs: won, scored, completed, achieved, played
-- Adjectives: great, fast, good
-- Articles: the, a, an
-
-RETRIEVED FACTS:
+Facts about {sport}:
 {context}
 
-Generate a Fill-in-the-Blank question about {sport} at {difficulty} level.
-
-Rules:
-1. The blank must replace a NUMBER, NAME, YEAR, or PLACE from the fact. Focus target: {target_blank_type}.
-2. All 4 options must be the same type (all years, all names, all numbers, or all places).
-3. Wrong options must be real {sport} related values, not random words.
-4. Never use 'completed', 'achieved', 'won', 'scored', 'played' as options.
-5. The sentence should NOT start with 'Regarding {sport}:' — write naturally like: 'The fastest serve ever recorded in ATP tennis was ___ km/h'.
+Generate one Fill-in-the-Blank question. 
+This item's blank type = {blank_type}.
 
 Requirements:
-- Sentence with Blank: A natural sentence with '___' as the blank.
+- Sentence with Blank: A sentence with '___' blank, no Regarding prefix.
 - Options: EXACTLY 4 answer options of the same specific type.
-- Correct Answer: The correct option matching one of the 4 options.
-- Explanation: 1-2 sentence factual context.
+- Correct Answer: The correct option text.
+- Explanation: Cite the fact from context.
 """
 
 GUESS_NUMBER_TEMPLATE = """

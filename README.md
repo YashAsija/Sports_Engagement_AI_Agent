@@ -1,68 +1,129 @@
-# AI-Powered Sports Engagement Content Agent 🚀
+# AI-Powered Sports Engagement Content Agent 🏆
 
-> **"Traditional sports content on social media is limited to repetitive MCQs. Our AI Agent produces 5 interactive content types grounded by live web search and ChromaDB vector retrieval, formatted for native Instagram Story & Sticker tools."**
+> Built for StapuBox AI Product/Engineer Intern Assignment
 
-Built for the **StapuBox AI Product/Engineer Intern Assignment**.
+Generate Instagram-ready sports quizzes, polls, and challenges 
+powered by Hybrid RAG (ChromaDB + Live Web Search) and Google Gemini.
 
----
+## Architecture
 
-## 🌟 Key Features & Highlights
+```
+User Input (Sport + Difficulty + Content Type)
+                       ↓
+               Hybrid RAG Router
+               ↙               ↘
+        ChromaDB          DuckDuckGo Web Search
+   (Historical facts)     (Recent news/results)
+               ↘               ↙
+          Context Merger + Sport Filter
+                       ↓
+         Type-Specific Prompt Template
+      ┌─────────────────────────────┐
+      │ MCQ / True-False / Poll /   │
+      │ Fill-in-Blank / Guess-Num   │
+      └─────────────────────────────┘
+                       ↓
+              Google Gemini LLM
+                       ↓
+          Pydantic Schema Validation
+           (auto-retry on failure)
+                       ↓
+               Duplicate Checker
+          (session dedup via difflib)
+                       ↓
+          Instagram-Formatted Output
+           (Copy for Story/Feed/Reel)
+```
 
-1. **5 Interactive Engagement Content Formats**:
-   - **MCQ**: 4 options, 1 correct answer, grounding context.
-   - **True / False**: Evaluated statement with factual explanation.
-   - **This-or-That Poll**: Opinion poll comparison (flagged as non-fact checked).
-   - **Fill in the Blank**: Sentence with `___` and 4 completion choices.
-   - **Guess the Number**: Target numerical answer with acceptable tolerance range ($\pm X$).
-2. **Dual Retrieval Engine (Hybrid RAG)**:
-   - **Live Web Search**: DuckDuckGo search integration for recent match scores, transfer news, and latest tournament statistics.
-   - **ChromaDB Vector Store**: Embedded historical sports trivia, legends, and world records using SentenceTransformers.
-3. **Item-Level & Full Batch Regeneration**:
-   - Regenerate individual items within a batch without disturbing others, or regenerate the entire batch.
-4. **Instagram Native Preview & Sticker Exporter**:
-   - Visual mock of Instagram Story Quiz & Poll stickers with a single-click "Copy for Instagram" formatter ready to paste with hashtags.
-5. **Zero-Failure Live Demo Safety**:
-   - Includes a deterministic Simulation Engine Fallback so the demo runs seamlessly with or without an active API key.
+## Features
+- 5 content types: MCQ, True/False, This-or-That Poll, Fill-in-Blank, Guess-the-Number
+- Batch of 4-5 items per request, each with different query angle
+- Per-item regeneration without disturbing rest of batch
+- Sport-locked generation (no cross-sport contamination)
+- Source citation on every card (ChromaDB vs Web Search)
+- Instagram copy formatter with hashtags
 
----
+## Type-Specific Architecture
 
-## 🛠️ Architecture & Tech Stack
+Each content type has its own prompt template with different rules:
 
-- **Backend Framework**: Python 3.9+ with FastAPI (Async REST endpoints)
-- **Vector Database**: ChromaDB (Embedded local SQLite store)
-- **Search Engine**: DuckDuckGo Search API
-- **LLM Engine**: Google Gemini SDK (`google-genai` / `google-generativeai`)
-- **Frontend**: React 18 + Vite + TypeScript + Vanilla Tailwind CSS + Lucide Icons
-- **Testing**: pytest suite enforcing Pydantic schema validation
+| Type | Blank/Options Rule | Source Priority |
+|------|-------------------|-----------------|
+| MCQ | 4 specific options, 1 correct | Web Search first |
+| True/False | Single checkable fact statement | ChromaDB first |
+| This-or-That | 2 options, no correct answer, opinion | No fact-check |
+| Fill-in-Blank | Blank = number/name/year/place ONLY | ChromaDB first |
+| Guess-the-Number | Exact numeric target + tolerance | Web Search first |
 
----
-
-## 🚀 Running Locally
+## Setup
 
 ### Prerequisites
-Make sure you have **Python 3.9+** and **Node.js 18+** installed.
+- Python 3.9+
+- Node.js 18+
+- Google Gemini API key (free at aistudio.google.com)
 
-### 1. Run the Backend Server
+### 1. Clone & Install Backend
 ```bash
-cd C:\Users\yash1\.gemini\antigravity-ide\scratch\sports-engagement-agent
-.\.venv\Scripts\activate
-# Optional: add GEMINI_API_KEY to .env file
-uvicorn backend.app.main:app --reload --port 8000
+git clone https://github.com/YashAsija/Sports_Engagement_AI_Agent
+cd Sports_Engagement_AI_Agent
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
-*API Documentation is live at `http://localhost:8000/docs`.*
 
-### 2. Run the Frontend Dashboard
+### 2. Environment Setup
+```bash
+cp .env.example .env
+# Edit .env and add your GEMINI_API_KEY
+```
+
+### 3. Seed ChromaDB
+```bash
+python seed_db.py
+```
+
+### 4. Run Backend
+```bash
+uvicorn backend.app.main:app --reload --port 8000
+# API docs at http://localhost:8000/docs
+```
+
+### 5. Run Frontend
 ```bash
 cd frontend
+npm install
 npm run dev
+# App at http://localhost:5173
 ```
-*Open `http://localhost:5173` in your browser.*
 
----
+## Environment Variables
 
-## 🧪 Running Automated Tests
+```env
+GEMINI_API_KEY=your_gemini_key_here
+CHROMA_PERSIST_DIR=./chroma_db
+```
 
-Verify schema enforcement and backend functionality:
+## Running Tests
 ```bash
-.\.venv\Scripts\python.exe -m pytest -v tests/test_backend.py
+pytest -v tests/test_backend.py
+```
+
+## Project Structure
+
+```
+Sports_Engagement_AI_Agent/
+├── backend/
+│   └── app/
+│       ├── main.py        # FastAPI entry point
+│       ├── generator.py   # LLM generation + batch logic
+│       ├── retriever.py   # ChromaDB + web search
+│       ├── validator.py   # Pydantic schemas per type
+│       └── templates/     # Type-specific prompt templates
+├── frontend/
+│   └── src/               # React + TypeScript dashboard
+├── tests/
+│   └── test_backend.py    # Schema validation tests
+├── seed_db.py             # Populate ChromaDB with sports facts
+├── requirements.txt
+└── .env.example
 ```

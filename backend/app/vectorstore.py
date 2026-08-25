@@ -4,29 +4,40 @@ from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-def format_source(source_str: str, sport: str) -> str:
+def format_source(source: str, sport: str) -> Dict[str, Any]:
     """
-    Formats raw URL strings or chroma:// UUIDs into human-readable, beautifully styled source labels.
+    Formats source URL or chroma UUID into human-readable dict label and URL for frontend.
     """
-    if not source_str:
-        return f"📚 Historical {sport} Knowledge Base"
-    if source_str.startswith('chroma://'):
-        return f"📚 Historical {sport} Knowledge Base"
-    elif 'wikipedia' in source_str.lower():
-        return "📖 Wikipedia"
-    elif 'espncricinfo' in source_str.lower():
-        return "🏏 ESPNcricinfo"
-    elif 'formula1.com' in source_str.lower() or 'f1' in source_str.lower():
-        return "🏎️ Formula1.com"
-    elif 'atptour' in source_str.lower() or 'tennis' in source_str.lower():
-        return "🎾 ATP Tour"
-    elif 'nba.com' in source_str.lower():
-        return "🏀 NBA.com"
-    elif 'fifa.com' in source_str.lower() or 'uefa' in source_str.lower():
-        return "⚽ FIFA.com"
-    else:
-        domain = source_str.replace('https://', '').replace('http://', '').split('/')[0]
-        return f"🌐 {domain}"
+    sport_icons = {
+        'cricket': '🏏', 'football': '⚽', 'tennis': '🎾',
+        'basketball': '🏀', 'badminton': '🏸', 'formula1': '🏎️', 'formula 1': '🏎️'
+    }
+    icon = sport_icons.get(sport.lower(), '🏆')
+    
+    if not source or 'chroma://' in source:
+        return {
+            'label': f'📚 {sport.capitalize()} Knowledge Base',
+            'url': None,
+            'type': 'chromadb'
+        }
+    domain_labels = {
+        'espncricinfo': '🏏 ESPNcricinfo',
+        'wikipedia': '📖 Wikipedia',
+        'formula1.com': '🏎️ Formula1.com',
+        'atptour': '🎾 ATP Tour',
+        'fifa.com': '⚽ FIFA',
+        'nba.com': '🏀 NBA',
+        'bbc.com/sport': '📺 BBC Sport',
+    }
+    for key, label in domain_labels.items():
+        if key in source.lower():
+            return {'label': label, 'url': source, 'type': 'web'}
+    
+    try:
+        domain = source.replace('https://','').replace('http://','').split('/')[0]
+        return {'label': f'🌐 {domain}', 'url': source, 'type': 'web'}
+    except Exception:
+        return {'label': '🌐 Web Source', 'url': source, 'type': 'web'}
 
 # Expanded Comprehensive Historical Sports Knowledge Base
 HISTORICAL_SPORTS_TRIVIA = [
@@ -122,7 +133,7 @@ class SportsVectorStore:
         if not self.collection:
             return
         
-        # Use hashed fact text as deterministic doc ID to prevent duplicates on upsert
+        # Bug 4 Fix: Metadata strictly added with {"sport": sport_name.lower()} and MD5 hash IDs
         ids = [hashlib.md5(item["fact"].encode('utf-8')).hexdigest() for item in HISTORICAL_SPORTS_TRIVIA]
         documents = [item["fact"] for item in HISTORICAL_SPORTS_TRIVIA]
         metadatas = [
@@ -142,15 +153,16 @@ class SportsVectorStore:
 
     def query_facts(self, query: str, sport: Optional[str] = None, n_results: int = 5) -> Dict[str, Any]:
         """
-        Query ChromaDB for relevant historical trivia filtered strictly by sport metadata.
+        Query ChromaDB for relevant historical trivia filtered strictly by sport metadata ($eq match).
         """
         sport_clean = sport.lower().strip() if sport else None
 
         if self.collection:
             try:
-                where_clause = {"sport": sport_clean} if sport_clean else None
+                # Bug 4 Fix: Exact sport metadata filter matching
+                where_clause = {"sport": {"$eq": sport_clean}} if sport_clean else None
                 results = self.collection.query(
-                    query_texts=[query],
+                    query_texts=[f"{sport_clean or 'sports'} {query}"],
                     n_results=n_results,
                     where=where_clause
                 )
@@ -162,16 +174,17 @@ class SportsVectorStore:
                 formatted_text = ""
                 sources = []
                 for i, doc in enumerate(docs):
-                    meta = metas[i] if i < len(metas) else {}
                     doc_id = doc_ids[i] if i < len(doc_ids) else f"doc_{i}"
-                    title = f"Historical {sport_clean.capitalize() if sport_clean else 'Sports'} Record"
+                    raw_url = f"chroma://{doc_id}"
+                    src_dict = format_source(raw_url, sport_clean or "Sports")
                     
-                    formatted_text += f"Historical Record [{title}]: {doc}\n"
+                    formatted_text += f"Historical Record: {doc}\n"
                     sources.append({
                         "source_type": "chromadb",
-                        "citation_title": format_source(f"chroma://{doc_id}", sport_clean or "Sports"),
-                        "url_or_id": f"chroma://{doc_id}",
-                        "display_source": format_source(f"chroma://{doc_id}", sport_clean or "Sports"),
+                        "citation_title": src_dict['label'],
+                        "url_or_id": raw_url,
+                        "display_source": src_dict['label'],
+                        "source_obj": src_dict,
                         "snippet": doc
                     })
                     
@@ -190,14 +203,15 @@ class SportsVectorStore:
         formatted_text = ""
         sources = []
         for item in filtered[:n_results]:
-            title = f"Historical {item['sport'].capitalize()} Record"
-            formatted_text += f"Historical Record [{title}]: {item['fact']}\n"
+            formatted_text += f"Historical Record: {item['fact']}\n"
             raw_url = f"chroma://{item['sport']}_{hashlib.md5(item['fact'].encode('utf-8')).hexdigest()[:6]}"
+            src_dict = format_source(raw_url, item['sport'])
             sources.append({
                 "source_type": "chromadb",
-                "citation_title": format_source(raw_url, item['sport']),
+                "citation_title": src_dict['label'],
                 "url_or_id": raw_url,
-                "display_source": format_source(raw_url, item['sport']),
+                "display_source": src_dict['label'],
+                "source_obj": src_dict,
                 "snippet": item['fact']
             })
             

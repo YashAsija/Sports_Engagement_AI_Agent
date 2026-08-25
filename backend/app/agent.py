@@ -15,10 +15,12 @@ from backend.app.templates import (
     get_system_prompt, MCQ_TEMPLATE, TRUE_FALSE_TEMPLATE, THIS_OR_THAT_TEMPLATE,
     FILL_IN_BLANK_TEMPLATE, GUESS_NUMBER_TEMPLATE
 )
-from backend.app.search import get_live_sports_context
+from backend.app.search import get_live_sports_context, QUERY_ANGLES, search_sports_facts
 from backend.app.vectorstore import vector_store_instance, format_source
 
 logger = logging.getLogger(__name__)
+
+BLANK_TYPES = ['number', 'name', 'year', 'place', 'number']
 
 def get_genai_client():
     api_key = os.getenv("GEMINI_API_KEY")
@@ -33,7 +35,7 @@ def get_genai_client():
 
 def clean_question(text: str, sport: str) -> str:
     """
-    BUG 2: Strips unnatural 'Regarding Sport:' prefixes from sentences.
+    Strips unnatural 'Regarding Sport:' prefixes from sentences.
     """
     if not text:
         return text
@@ -52,6 +54,21 @@ def clean_question(text: str, sport: str) -> str:
         if cleaned.lower().startswith(prefix.lower()):
             cleaned = cleaned[len(prefix):].strip()
     return cleaned
+
+def has_placeholder(item: Dict[str, Any]) -> bool:
+    """
+    BUG 2 FIX: Placeholder detector — flags fake placeholder text.
+    """
+    BANNED = [
+        'record option a', 'record option b', 'record option c', 'record option d',
+        'option a', 'option b', 'option c', 'option d',
+        'which official record is associated',
+        'in the following statement',
+        'verified formula 1 competition records a',
+        'placeholder', 'answer option',
+    ]
+    text = str(item).lower()
+    return any(b in text for b in BANNED)
 
 def validate_sport_relevance(item: Dict[str, Any], expected_sport: str) -> bool:
     """
@@ -86,6 +103,32 @@ def is_duplicate(new_question: str, history: List[str], threshold: float = 0.7) 
             return True
     return False
 
+def get_context_safe(sport: str, query: str) -> str:
+    """
+    BUG 2 FIX: Safe retriever pipeline with emergency fallback.
+    """
+    context = ""
+    try:
+        chroma_res = vector_store_instance.query_facts(query=query, sport=sport, n_results=4)
+        if chroma_res and chroma_res.get("formatted_text"):
+            context += "KNOWLEDGE BASE:\n" + chroma_res["formatted_text"] + "\n\n"
+    except Exception as e:
+        logger.error(f"ChromaDB error in get_context_safe: {e}")
+
+    try:
+        web_res = get_live_sports_context(sport, custom_query=query)
+        if web_res and web_res.get("formatted_text"):
+            context += "WEB SEARCH:\n" + web_res["formatted_text"] + "\n\n"
+    except Exception as e:
+        logger.error(f"Web search error in get_context_safe: {e}")
+
+    if len(context.strip()) < 50:
+        # Emergency fallback
+        fallback_data = search_sports_facts(f"{sport} world records famous players facts", max_results=3)
+        context = "EMERGENCY WEB SEARCH:\n" + "\n".join([f"{item['title']}: {item['snippet']}" for item in fallback_data])
+
+    return context
+
 class SportsAgentEngine:
     def __init__(self):
         self.genai_client = get_genai_client()
@@ -106,7 +149,6 @@ class SportsAgentEngine:
                 parsed = ThisOrThatPollItem(**data)
                 return parsed.model_dump()
             elif fmt == "Fill in the Blank":
-                # Ensure options format compatibility if LLM returned dict options
                 if isinstance(data.get("options"), dict):
                     data["options"] = list(data["options"].values())
                 if data.get("correct_answer") in ["A", "B", "C", "D"]:
@@ -126,24 +168,6 @@ class SportsAgentEngine:
             logger.warning(f"Failed parsing item for format '{fmt}': {e}")
             return None
 
-    def verify_fact_with_llm(self, answer: str, context: str) -> bool:
-        """
-        Web search factual accuracy verification step.
-        """
-        if not self.genai_client or not answer or not context:
-            return True
-        try:
-            prompt = f"Does this answer: '{answer}' match the facts in: '{context}'? Reply only YES or NO."
-            res = self.genai_client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt
-            )
-            ans_text = res.text.strip().upper()
-            return "YES" in ans_text
-        except Exception as e:
-            logger.warning(f"Fact verification check failed: {e}")
-            return True
-
     def generate_batch(self, request: BatchGenerationRequest) -> List[Dict[str, Any]]:
         if not self.genai_client:
             self.genai_client = get_genai_client()
@@ -154,17 +178,9 @@ class SportsAgentEngine:
         count = request.count
         retrieval = request.retrieval_source or ("web_search" if request.use_web_search else "chromadb")
 
-        # BUG 5: Rotation queries & target blank types per batch item
-        query_angles = [
-            f"{sport} speed records numbers statistics",
-            f"{sport} champion player names winners",
-            f"{sport} years history dates founded",
-            f"{sport} countries places venues stadiums",
-            f"{sport} scores points tally records",
-        ]
-        blank_types = ['number', 'name', 'year', 'place', 'number']
+        sport_clean = sport.lower().replace(" ", "")
+        angles = QUERY_ANGLES.get(sport_clean, [f"{sport} batting bowling scoring world records", f"{sport} player milestones history facts"])
 
-        # Format type distribution
         if fmt == "Mixed Batch":
             base_formats = ["MCQ", "True / False", "This-or-That Poll", "Fill in the Blank", "Guess the Number"]
             formats_to_gen = [base_formats[i % len(base_formats)] for i in range(count)]
@@ -174,35 +190,20 @@ class SportsAgentEngine:
         items = []
 
         for idx, item_fmt in enumerate(formats_to_gen):
-            current_angle = query_angles[idx % len(query_angles)]
-            target_blank = blank_types[idx % len(blank_types)]
+            current_angle = angles[idx % len(angles)].replace('{sport}', sport)
+            target_blank = BLANK_TYPES[idx % len(BLANK_TYPES)]
 
-            # 1. Retrieve Knowledge Grounding Context with query angle rotation
-            if retrieval == "web_search":
-                web_data = get_live_sports_context(sport, difficulty, custom_query=current_angle)
-                context_text = f"--- LIVE WEB SEARCH CONTEXT ---\n{web_data['formatted_text']}"
-                sources_list = web_data["sources"]
-            elif retrieval == "chromadb":
-                chroma_data = vector_store_instance.query_facts(
-                    f"{sport} {current_angle}", 
-                    sport=sport, 
-                    n_results=max(count * 2, 5)
-                )
-                context_text = f"--- CHROMADB HISTORICAL VECTOR STORE CONTEXT ---\n{chroma_data['formatted_text']}"
-                sources_list = chroma_data["sources"]
-            else: # 'both' - Hybrid Retrieval Mode
-                web_data = get_live_sports_context(sport, difficulty, custom_query=current_angle)
-                chroma_data = vector_store_instance.query_facts(
-                    f"{sport} {current_angle}", 
-                    sport=sport, 
-                    n_results=4
-                )
-                context_text = f"--- LIVE WEB SEARCH CONTEXT ---\n{web_data['formatted_text']}\n\n--- CHROMADB HISTORICAL VECTOR STORE CONTEXT ---\n{chroma_data['formatted_text']}"
-                sources_list = web_data["sources"] + chroma_data["sources"]
-
-            source_for_item = sources_list[idx % len(sources_list)]
-            if "display_source" not in source_for_item or not source_for_item["display_source"]:
-                source_for_item["display_source"] = format_source(source_for_item.get("url_or_id", ""), sport)
+            context_text = get_context_safe(sport, current_angle)
+            raw_url = f"https://www.google.com/search?q={sport}+{current_angle.replace(' ', '+')}"
+            src_dict = format_source(raw_url, sport)
+            source_for_item = {
+                "source_type": retrieval if retrieval != "both" else "web_search",
+                "citation_title": src_dict["label"],
+                "url_or_id": raw_url,
+                "display_source": src_dict["label"],
+                "source_obj": src_dict,
+                "snippet": context_text[:150]
+            }
 
             item = None
 
@@ -218,10 +219,10 @@ class SportsAgentEngine:
                     target_blank_type=target_blank
                 )
 
-            if not item:
+            if not item or has_placeholder(item):
                 item = self._synthesize_unique_item(sport, difficulty, item_fmt, idx, source_for_item, target_blank)
 
-            # Apply clean_question to strip 'Regarding Sport:'
+            # Strip unnatural prefixes
             if "question" in item:
                 item["question"] = clean_question(item["question"], sport)
             if "sentence_with_blank" in item:
@@ -257,31 +258,30 @@ class SportsAgentEngine:
         elif fmt == "This-or-That Poll":
             prompt_template = THIS_OR_THAT_TEMPLATE.format(sport=sport, context=context)
         elif fmt == "Fill in the Blank":
-            prompt_template = FILL_IN_BLANK_TEMPLATE.format(sport=sport, difficulty=difficulty, context=context, target_blank_type=target_blank_type)
+            prompt_template = FILL_IN_BLANK_TEMPLATE.format(sport=sport, difficulty=difficulty, context=context, blank_type=target_blank_type)
         elif fmt == "Guess the Number":
             prompt_template = GUESS_NUMBER_TEMPLATE.format(sport=sport, difficulty=difficulty, context=context)
 
-        recent_topics = self.generated_questions_history[-10:]
+        recent_topics = self.generated_questions_history[-5:]
         avoid_str = ", ".join(recent_topics) if recent_topics else "None"
-        avoid_prompt = f"\nIMPORTANT: Do NOT generate questions about these topics already covered: {avoid_str}\nGenerate a completely different question, not about previous items."
+        avoid_prompt = f"\nDo NOT generate questions about: {avoid_str}\nGenerate a completely different question."
 
         system_header = get_system_prompt(sport)
         full_prompt = f"{system_header}\n\n{prompt_template}\n{avoid_prompt}\n\nRespond ONLY with valid JSON matching the format schema."
 
         for attempt in range(max_retries):
             try:
-                temp = 0.7 + (item_index * 0.05) + (attempt * 0.1)
+                temp = 0.70 + (item_index * 0.05) + (attempt * 0.1)
                 response = self.genai_client.models.generate_content(
                     model="gemini-2.5-flash",
                     contents=full_prompt,
                     config={
                         "response_mime_type": "application/json",
-                        "temperature": min(temp, 1.0)
+                        "temperature": min(temp, 0.95)
                     }
                 )
                 data = json.loads(response.text)
                 
-                # Handle JSON nested key variations from LLM
                 if "sentence" in data and "sentence_with_blank" not in data:
                     data["sentence_with_blank"] = data.pop("sentence")
                 
@@ -298,6 +298,10 @@ class SportsAgentEngine:
                     }
                 else:
                     data["grounding"] = source
+
+                if has_placeholder(data):
+                    logger.warning(f"Placeholder detected in attempt {attempt+1}. Retrying with temp=0.95...")
+                    continue
 
                 if not validate_sport_relevance(data, sport):
                     continue
@@ -319,19 +323,19 @@ class SportsAgentEngine:
     def _synthesize_unique_item(self, sport: str, difficulty: str, fmt: str, idx: int, source: Dict[str, Any], target_blank_type: str = "number") -> Dict[str, Any]:
         """
         Generates rich, typed, natural, non-placeholder fallback questions.
+        Zero generic placeholders like 'Record Option B'.
         """
         item_id = f"item_{uuid.uuid4().hex[:8]}"
         snippet = source.get("snippet", "")
-        citation_title = source.get("citation_title", f"{sport} Milestone")
 
         if not snippet or len(snippet) < 20:
             facts = vector_store_instance.query_facts(f"{sport} records statistics facts", sport=sport, n_results=5)
             retrieved = facts["sources"][idx % len(facts["sources"])] if facts["sources"] else None
             snippet = retrieved["snippet"] if retrieved else f"Verified {sport} competition records."
 
-        disp = format_source(source.get("url_or_id", ""), sport)
+        src_dict = format_source(source.get("url_or_id", ""), sport)
         source_copy = source.copy()
-        source_copy["display_source"] = disp
+        source_copy["display_source"] = src_dict["label"]
 
         if fmt == "Fill in the Blank":
             if target_blank_type == "year":
@@ -361,7 +365,7 @@ class SportsAgentEngine:
                     grounding=GroundingSource(**source_copy)
                 ).model_dump()
             elif target_blank_type == "place":
-                places = ["Roland Garros", "Wimbledon", "Flushing Meadows", "Melbourne Park", "Wembley Stadium", "Camp Nou", "Lords Cricket Ground", "Madison Square Garden"]
+                places = ["Roland Garros", "Wimbledon", "Flushing Meadows", "Melbourne Park", "Wembley Stadium", "Camp Nou", "Lords Cricket Ground", "Monza Circuit"]
                 shuffled = random.sample(places, 4)
                 correct_ans = shuffled[0]
                 sentence = clean_question(f"The major {sport} championship event related to '{snippet[:50]}...' is hosted at ___", sport)
@@ -374,7 +378,7 @@ class SportsAgentEngine:
                     grounding=GroundingSource(**source_copy)
                 ).model_dump()
             else: # name
-                names = ["Novak Djokovic", "Rafael Nadal", "Lionel Messi", "Cristiano Ronaldo", "Virat Kohli", "Sachin Tendulkar", "LeBron James", "PV Sindhu"]
+                names = ["Novak Djokovic", "Rafael Nadal", "Lionel Messi", "Cristiano Ronaldo", "Virat Kohli", "Sachin Tendulkar", "Lewis Hamilton", "LeBron James"]
                 shuffled = random.sample(names, 4)
                 correct_ans = shuffled[0]
                 sentence = clean_question(f"The iconic {sport} superstar ___ established the record: '{snippet[:60]}...'", sport)
@@ -388,7 +392,7 @@ class SportsAgentEngine:
                 ).model_dump()
 
         elif fmt == "MCQ":
-            names = ["Novak Djokovic", "Rafael Nadal", "Lionel Messi", "Cristiano Ronaldo", "Virat Kohli", "Sachin Tendulkar", "Max Verstappen", "LeBron James"]
+            names = ["Novak Djokovic", "Rafael Nadal", "Lionel Messi", "Cristiano Ronaldo", "Virat Kohli", "Sachin Tendulkar", "Lewis Hamilton", "LeBron James"]
             shuffled = random.sample(names, 4)
             correct_ans = shuffled[0]
             return MCQItem(

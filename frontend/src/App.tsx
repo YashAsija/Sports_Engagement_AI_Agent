@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { ContentItem, BatchGenerationParams } from './types';
 import { ControlPanel } from './components/ControlPanel';
 import { ContentCard } from './components/ContentCard';
-import { Trophy, Command, RefreshCw, Flame, Sparkles, Layers, Activity } from 'lucide-react';
+import { Trophy, RefreshCw, Flame, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = 'http://localhost:8000';

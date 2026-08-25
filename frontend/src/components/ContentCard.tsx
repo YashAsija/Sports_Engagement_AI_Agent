@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ContentItem } from '../types';
 import { GroundingBadge } from './GroundingBadge';
-import { RefreshCw, Copy, Check, Eye, Smartphone, Trophy, Flame, Target, HelpCircle, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Copy, Check, Eye, Smartphone, CheckCircle2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface ContentCardProps {

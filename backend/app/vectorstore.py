@@ -4,6 +4,30 @@ from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+def format_source(source_str: str, sport: str) -> str:
+    """
+    Formats raw URL strings or chroma:// UUIDs into human-readable, beautifully styled source labels.
+    """
+    if not source_str:
+        return f"📚 Historical {sport} Knowledge Base"
+    if source_str.startswith('chroma://'):
+        return f"📚 Historical {sport} Knowledge Base"
+    elif 'wikipedia' in source_str.lower():
+        return "📖 Wikipedia"
+    elif 'espncricinfo' in source_str.lower():
+        return "🏏 ESPNcricinfo"
+    elif 'formula1.com' in source_str.lower() or 'f1' in source_str.lower():
+        return "🏎️ Formula1.com"
+    elif 'atptour' in source_str.lower() or 'tennis' in source_str.lower():
+        return "🎾 ATP Tour"
+    elif 'nba.com' in source_str.lower():
+        return "🏀 NBA.com"
+    elif 'fifa.com' in source_str.lower() or 'uefa' in source_str.lower():
+        return "⚽ FIFA.com"
+    else:
+        domain = source_str.replace('https://', '').replace('http://', '').split('/')[0]
+        return f"🌐 {domain}"
+
 # Expanded Comprehensive Historical Sports Knowledge Base
 HISTORICAL_SPORTS_TRIVIA = [
     # CRICKET
@@ -145,8 +169,9 @@ class SportsVectorStore:
                     formatted_text += f"Historical Record [{title}]: {doc}\n"
                     sources.append({
                         "source_type": "chromadb",
-                        "citation_title": title,
+                        "citation_title": format_source(f"chroma://{doc_id}", sport_clean or "Sports"),
                         "url_or_id": f"chroma://{doc_id}",
+                        "display_source": format_source(f"chroma://{doc_id}", sport_clean or "Sports"),
                         "snippet": doc
                     })
                     
@@ -167,10 +192,12 @@ class SportsVectorStore:
         for item in filtered[:n_results]:
             title = f"Historical {item['sport'].capitalize()} Record"
             formatted_text += f"Historical Record [{title}]: {item['fact']}\n"
+            raw_url = f"chroma://{item['sport']}_{hashlib.md5(item['fact'].encode('utf-8')).hexdigest()[:6]}"
             sources.append({
                 "source_type": "chromadb",
-                "citation_title": title,
-                "url_or_id": f"chroma://{item['sport']}_{hashlib.md5(item['fact'].encode('utf-8')).hexdigest()[:6]}",
+                "citation_title": format_source(raw_url, item['sport']),
+                "url_or_id": raw_url,
+                "display_source": format_source(raw_url, item['sport']),
                 "snippet": item['fact']
             })
             

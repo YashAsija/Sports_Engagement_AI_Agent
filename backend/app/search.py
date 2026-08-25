@@ -3,6 +3,7 @@ import datetime
 import random
 from typing import List, Dict, Any
 from duckduckgo_search import DDGS
+from backend.app.vectorstore import format_source
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ def search_sports_facts(query: str, max_results: int = 4) -> List[Dict[str, str]
             }
         ]
 
-def get_live_sports_context(sport: str, difficulty: str = "Medium") -> Dict[str, Any]:
+def get_live_sports_context(sport: str, difficulty: str = "Medium", custom_query: Optional[str] = None) -> Dict[str, Any]:
     """
     Builds timestamp-based, rotated query angles prepended with sport name and site-specific targets.
     """
@@ -81,16 +82,17 @@ def get_live_sports_context(sport: str, difficulty: str = "Medium") -> Dict[str,
     current_year = datetime.datetime.now().year
     current_month = datetime.datetime.now().strftime("%B %Y")
     
-    # 1. Rotate query angle
-    angles = QUERY_ANGLES.get(sport_clean, [f"records and news {current_year}", f"statistics and milestones {current_year}"])
-    last_idx = LAST_QUERY_ANGLES.get(sport_clean, -1)
-    next_idx = (last_idx + 1) % len(angles)
-    LAST_QUERY_ANGLES[sport_clean] = next_idx
-    angle = angles[next_idx]
+    if custom_query:
+        search_query = f"{sport} {custom_query} {current_month}"
+    else:
+        angles = QUERY_ANGLES.get(sport_clean, [f"records and news {current_year}", f"statistics and milestones {current_year}"])
+        last_idx = LAST_QUERY_ANGLES.get(sport_clean, -1)
+        next_idx = (last_idx + 1) % len(angles)
+        LAST_QUERY_ANGLES[sport_clean] = next_idx
+        angle = angles[next_idx]
 
-    # 2. Site-specific reliable sources query
-    site_filter = "site:espncricinfo.com OR site:bbc.com/sport OR site:fifa.com OR site:atptour.com OR site:nba.com"
-    search_query = f"{sport} {angle} {current_month} {site_filter}"
+        site_filter = "site:espncricinfo.com OR site:bbc.com/sport OR site:fifa.com OR site:atptour.com OR site:nba.com"
+        search_query = f"{sport} {angle} {current_month} {site_filter}"
 
     results = search_sports_facts(search_query, max_results=4)
     
@@ -98,10 +100,12 @@ def get_live_sports_context(sport: str, difficulty: str = "Medium") -> Dict[str,
     sources = []
     for idx, item in enumerate(results, 1):
         formatted_context += f"Source [{idx}] ({item['title']}): {item['snippet']}\n"
+        disp = format_source(item["url"], sport)
         sources.append({
             "source_type": "web_search",
             "citation_title": item["title"],
             "url_or_id": item["url"],
+            "display_source": disp,
             "snippet": item["snippet"][:150] + "..." if len(item["snippet"]) > 150 else item["snippet"]
         })
         

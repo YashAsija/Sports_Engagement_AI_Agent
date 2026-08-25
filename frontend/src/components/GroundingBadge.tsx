@@ -6,6 +6,8 @@ interface GroundingBadgeProps {
 }
 
 export const GroundingBadge = ({ grounding }: GroundingBadgeProps) => {
+  const displayLabel = grounding.display_source || grounding.citation_title;
+
   if (grounding.source_type === 'opinion_based') {
     return (
       <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-sm">
@@ -19,8 +21,8 @@ export const GroundingBadge = ({ grounding }: GroundingBadgeProps) => {
     return (
       <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm">
         <Search className="w-3.5 h-3.5 text-emerald-400" />
-        <span className="truncate max-w-[180px] font-mono">{grounding.citation_title}</span>
-        {grounding.url_or_id && (
+        <span className="truncate max-w-[200px] font-mono">{displayLabel}</span>
+        {grounding.url_or_id && grounding.url_or_id.startsWith('http') && (
           <a href={grounding.url_or_id} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-0.5 ml-0.5">
             <ExternalLink className="w-3 h-3 text-emerald-400" />
           </a>
@@ -33,7 +35,7 @@ export const GroundingBadge = ({ grounding }: GroundingBadgeProps) => {
     return (
       <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-sm">
         <Database className="w-3.5 h-3.5 text-cyan-400" />
-        <span className="truncate max-w-[180px] font-mono">ChromaDB: {grounding.citation_title}</span>
+        <span className="truncate max-w-[200px] font-mono">{displayLabel}</span>
       </div>
     );
   }
@@ -41,7 +43,7 @@ export const GroundingBadge = ({ grounding }: GroundingBadgeProps) => {
   return (
     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-sm">
       <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-      <span>Verified Sports Record</span>
+      <span>{displayLabel}</span>
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import os
 import json
 from enum import Enum
-from typing import List, Optional, Union, Literal
+from typing import List, Optional, Union, Literal, Dict
 from pydantic import BaseModel, Field, validator
 
 class SportType(str, Enum):
@@ -29,6 +29,7 @@ class GroundingSource(BaseModel):
     source_type: Literal["web_search", "chromadb", "opinion_based", "fallback_verified"] = "web_search"
     citation_title: str = Field(description="Name or title of the retrieved source")
     url_or_id: Optional[str] = Field(default=None, description="URL or Document ID")
+    display_source: Optional[str] = Field(default=None, description="Human-readable formatted source label")
     snippet: Optional[str] = Field(default=None, description="Excerpt supporting the factual statement")
 
 # Base validator to ensure no wrong sport hallucinations
@@ -40,9 +41,33 @@ def check_sport_relevance(sport_val: str, text_val: str):
     text_lower = text_val.lower()
     for s in wrong_sports:
         if s != expected and s in text_lower:
-            # Exception for phrases like "football vs basketball" if both mentioned, but strict for single sport context
             raise ValueError(f"Content mentions wrong sport '{s}' when expecting '{sport_val}'")
     return text_val
+
+def validate_fitb_options(options: List[str], correct_answer: str) -> bool:
+    """
+    BUG 3: Validates Fill-in-the-Blank options for type consistency & generic verb prohibition.
+    """
+    banned_words = [
+        'completed', 'achieved', 'won', 'scored', 'played', 
+        'finished', 'reached', 'made', 'done', 'performed',
+        'started', 'began', 'ended', 'happened'
+    ]
+    for opt in options:
+        if opt.lower().strip() in banned_words:
+            raise ValueError(f"Option '{opt}' is a generic verb — must be a specific name/number/year/place")
+    
+    # Check: all options same type (all numeric OR all text)
+    all_numeric = all(any(char.isdigit() for char in str(opt)) for opt in options)
+    all_text = all(not any(char.isdigit() for char in str(opt)) for opt in options)
+    if not all_numeric and not all_text:
+        raise ValueError("Options mix numbers and text — all options must be the same type")
+    
+    # Check: options are not all identical
+    if len(set(str(o).lower().strip() for o in options)) < 4:
+        raise ValueError("Duplicate options detected in Fill-in-the-Blank")
+    
+    return True
 
 # 1. Multiple Choice Question (MCQ)
 class MCQItem(BaseModel):
@@ -105,6 +130,12 @@ class FillInTheBlankItem(BaseModel):
     @validator('sentence_with_blank', 'explanation', pre=False, always=True)
     def must_mention_sport_context(cls, v, values):
         return check_sport_relevance(values.get('sport', ''), v)
+
+    @validator('options', pre=False, always=True)
+    def check_fitb_options(cls, v, values):
+        correct = values.get('correct_answer', '')
+        validate_fitb_options(v, correct)
+        return v
 
 # 5. Guess the Number
 class GuessTheNumberItem(BaseModel):

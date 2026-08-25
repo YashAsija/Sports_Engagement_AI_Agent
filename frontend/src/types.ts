@@ -2,6 +2,7 @@ export interface GroundingSource {
   source_type: 'web_search' | 'chromadb' | 'opinion_based' | 'fallback_verified';
   citation_title: string;
   url_or_id?: string;
+  display_source?: string;
   snippet?: string;
 }
 

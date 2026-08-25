@@ -19,7 +19,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS for Vite frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,6 +42,11 @@ def get_metadata():
         "sports": ["Cricket", "Football", "Tennis", "Basketball", "Badminton", "Formula 1", "Volleyball"],
         "difficulties": ["Easy", "Medium", "Hard"],
         "formats": ["Mixed Batch", "MCQ", "True / False", "This-or-That Poll", "Fill in the Blank", "Guess the Number"],
+        "retrieval_sources": [
+            {"id": "web_search", "label": "Web Search (Live News)"},
+            {"id": "chromadb", "label": "ChromaDB (Historical Stats)"},
+            {"id": "both", "label": "Hybrid Dual Engine (Both)"}
+        ],
         "vectorstore_status": "Ready" if vector_store_instance.collection else "Fallback Mode"
     }
 
@@ -54,6 +58,7 @@ def generate_batch(request: BatchGenerationRequest):
             "sport": request.sport,
             "difficulty": request.difficulty,
             "content_format": request.content_format,
+            "retrieval_source": request.retrieval_source,
             "items": items,
             "count": len(items)
         }
@@ -63,12 +68,12 @@ def generate_batch(request: BatchGenerationRequest):
 @app.post("/api/regenerate-item")
 def regenerate_item(request: SingleItemRegenerateRequest):
     try:
-        # Create a 1-item batch request for targeted format
         single_req = BatchGenerationRequest(
             sport=request.sport,
             difficulty=request.difficulty,
             content_format=request.content_format,
             count=1,
+            retrieval_source=request.retrieval_source,
             use_web_search=request.use_web_search
         )
         new_items = agent_engine.generate_batch(single_req)

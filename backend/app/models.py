@@ -38,7 +38,7 @@ class MCQItem(BaseModel):
     sport: str
     difficulty: str
     question: str = Field(description="The quiz question text")
-    options: List[str] = Field(description="Exactly 4 distinct answer options", min_items=4, max_items=4)
+    options: List[str] = Field(description="Exactly 4 distinct answer options")
     correct_answer: str = Field(description="The exact text matching one of the options")
     explanation: str = Field(description="Short factual explanation grounding the answer")
     grounding: GroundingSource
@@ -60,7 +60,7 @@ class ThisOrThatPollItem(BaseModel):
     format: Literal["This-or-That Poll"] = "This-or-That Poll"
     sport: str
     prompt: str = Field(description="Opinion question comparing two items/players/teams")
-    options: List[str] = Field(description="Exactly 2 options for comparison", min_items=2, max_items=2)
+    options: List[str] = Field(description="Exactly 2 options for comparison")
     is_opinion: bool = Field(default=True, description="Flagged as opinion-based, not fact-checked")
     explanation: str = Field(default="Pure opinion poll for Instagram community engagement", description="Context about the debate")
     grounding: GroundingSource = Field(default_factory=lambda: GroundingSource(source_type="opinion_based", citation_title="Community Opinion Poll"))
@@ -72,7 +72,7 @@ class FillInTheBlankItem(BaseModel):
     sport: str
     difficulty: str
     sentence_with_blank: str = Field(description="Sentence containing '___' indicating the missing word/phrase")
-    options: List[str] = Field(description="Exactly 4 answer options to complete the blank", min_items=4, max_items=4)
+    options: List[str] = Field(description="Exactly 4 answer options to complete the blank")
     correct_answer: str = Field(description="The correct word/phrase matching one option")
     explanation: str = Field(description="Short factual explanation")
     grounding: GroundingSource
@@ -94,9 +94,10 @@ ContentItem = Union[MCQItem, TrueFalseItem, ThisOrThatPollItem, FillInTheBlankIt
 class BatchGenerationRequest(BaseModel):
     sport: str = "Cricket"
     difficulty: str = "Medium"
-    content_format: str = "Mixed Batch" # "MCQ", "True / False", "This-or-That Poll", "Fill in the Blank", "Guess the Number", "Mixed Batch"
+    content_format: str = "Mixed Batch"
     count: int = 5
-    use_web_search: bool = True
+    retrieval_source: str = "both" # "web_search", "chromadb", "both"
+    use_web_search: Optional[bool] = True
 
 class SingleItemRegenerateRequest(BaseModel):
     sport: str
@@ -104,7 +105,8 @@ class SingleItemRegenerateRequest(BaseModel):
     content_format: str
     target_item_id: str
     existing_batch_ids: List[str] = []
-    use_web_search: bool = True
+    retrieval_source: str = "both" # "web_search", "chromadb", "both"
+    use_web_search: Optional[bool] = True
 
 class BatchGenerationResponse(BaseModel):
     sport: str

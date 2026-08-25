@@ -35,9 +35,6 @@ class SportsAgentEngine:
         self.seen_questions_history = set()
 
     def validate_and_parse_item(self, data: Dict[str, Any], fmt: str) -> Optional[Dict[str, Any]]:
-        """
-        Validates every generated item against a strict schema for its specific format type.
-        """
         try:
             if fmt == "MCQ":
                 parsed = MCQItem(**data)
@@ -74,26 +71,49 @@ class SportsAgentEngine:
         difficulty = request.difficulty
         fmt = request.content_format
         count = request.count
-        use_search = request.use_web_search
+        retrieval = request.retrieval_source or ("web_search" if request.use_web_search else "chromadb")
 
-        # 1. Retrieve Grounded Context (Web search for recent info; ChromaDB for historical facts)
-        if use_search:
-            retrieved = get_live_sports_context(sport, difficulty)
-        else:
-            retrieved = vector_store_instance.query_facts(
+        # 1. Retrieve Knowledge Grounding Context depending on selected source mode: 'web_search', 'chromadb', or 'both'
+        context_text = ""
+        sources_list = []
+
+        if retrieval == "web_search":
+            web_data = get_live_sports_context(sport, difficulty)
+            context_text = f"--- LIVE WEB SEARCH CONTEXT ---\n{web_data['formatted_text']}"
+            sources_list = web_data["sources"]
+        elif retrieval == "chromadb":
+            chroma_data = vector_store_instance.query_facts(
                 f"{sport} iconic historical records, legends, match stats and trivia", 
                 sport=sport, 
                 n_results=max(count, 5)
             )
+            context_text = f"--- CHROMADB HISTORICAL VECTOR STORE CONTEXT ---\n{chroma_data['formatted_text']}"
+            sources_list = chroma_data["sources"]
+        else: # 'both' - Hybrid Retrieval Mode
+            web_data = get_live_sports_context(sport, difficulty)
+            chroma_data = vector_store_instance.query_facts(
+                f"{sport} iconic historical records, legends, match stats and trivia", 
+                sport=sport, 
+                n_results=3
+            )
+            context_text = f"--- LIVE WEB SEARCH CONTEXT ---\n{web_data['formatted_text']}\n\n--- CHROMADB HISTORICAL VECTOR STORE CONTEXT ---\n{chroma_data['formatted_text']}"
+            # Interleave sources
+            sources_list = []
+            max_len = max(len(web_data["sources"]), len(chroma_data["sources"]))
+            for i in range(max_len):
+                if i < len(web_data["sources"]):
+                    sources_list.append(web_data["sources"][i])
+                if i < len(chroma_data["sources"]):
+                    sources_list.append(chroma_data["sources"][i])
 
-        context_text = retrieved["formatted_text"]
-        sources_list = retrieved["sources"] if retrieved["sources"] else [{
-            "source_type": "web_search" if use_search else "chromadb",
-            "citation_title": f"Official {sport} Archive",
-            "snippet": f"Verified factual data for {sport} competition records."
-        }]
+        if not sources_list:
+            sources_list = [{
+                "source_type": retrieval if retrieval != "both" else "web_search",
+                "citation_title": f"Official {sport} Knowledge Base",
+                "snippet": f"Verified factual data for {sport} competition records."
+            }]
 
-        # Determine item format distribution
+        # Format type distribution
         if fmt == "Mixed Batch":
             base_formats = ["MCQ", "True / False", "This-or-That Poll", "Fill in the Blank", "Guess the Number"]
             formats_to_gen = [base_formats[i % len(base_formats)] for i in range(count)]
@@ -103,12 +123,10 @@ class SportsAgentEngine:
         items = []
         generated_batch_questions = set()
 
-        # Generate each item dynamically ensuring uniqueness
         for idx, item_fmt in enumerate(formats_to_gen):
             source_for_item = sources_list[idx % len(sources_list)]
-            
-            # Try generating with Gemini LLM first if client available
             item = None
+
             if self.genai_client:
                 item = self._generate_single_llm_item_with_retry(
                     sport=sport,
@@ -121,7 +139,6 @@ class SportsAgentEngine:
                     exclude_questions=generated_batch_questions
                 )
 
-            # Dynamic unique fallback synthesizer if LLM fails or is unconfigured
             if not item:
                 item = self._synthesize_unique_item(sport, difficulty, item_fmt, idx, source_for_item)
 
@@ -196,13 +213,8 @@ class SportsAgentEngine:
         return None
 
     def _synthesize_unique_item(self, sport: str, difficulty: str, fmt: str, idx: int, source: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Synthesizes 100% unique, grounded sports facts for any index offset.
-        Guarantees that no 2 items in a batch are identical even when rate-limited or offline.
-        """
         item_id = f"item_{uuid.uuid4().hex[:8]}"
 
-        # Diverse fact catalogs per sport and format
         FACT_CATALOG = [
             {
                 "mcq_q": f"Which player holds the record for most career goals/runs in {sport} international tournaments?",

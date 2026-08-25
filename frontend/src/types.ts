@@ -30,10 +30,12 @@ export interface ContentItem {
   grounding: GroundingSource;
 }
 
+export type RetrievalSourceOption = 'web_search' | 'chromadb' | 'both';
+
 export interface BatchGenerationParams {
   sport: string;
   difficulty: string;
   content_format: string;
   count: number;
-  use_web_search: boolean;
+  retrieval_source: RetrievalSourceOption;
 }
